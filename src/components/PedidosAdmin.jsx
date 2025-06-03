@@ -356,7 +356,14 @@ function PedidosAdmin() {
                   </Label>
                   <Select
                     value={formData.id_ruta}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, id_ruta: value }))}
+                    onValueChange={(value) => {
+                      const rutaSeleccionada = rutas.find((r) => r.id_ruta.toString() === value);
+                      setFormData((prev) => ({
+                        ...prev,
+                        id_ruta: value,
+                        precio: rutaSeleccionada ? rutaSeleccionada.precio : ""
+                      }));
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccione una ruta" />
