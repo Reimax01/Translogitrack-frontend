@@ -3,179 +3,129 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import useAuth from "@/hooks/useAuth"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Bell, Search, ChevronDown, User, Settings, LogOut } from "lucide-react"
 
-function Header({ onMenuToggle }) {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+function Header() {
   const { user, logout, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const [searchValue, setSearchValue] = useState("")
 
   const userName = user?.nombre_completo || user?.nombre || "Usuario"
   const userRole = user?.rol || "Usuario"
 
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen)
-  }
-
-  const closeDropdown = () => {
-    setIsDropdownOpen(false)
-  }
-
   const handleLogout = () => {
     logout()
     navigate("/login")
-    closeDropdown()
   }
 
   const handleProfileClick = () => {
     navigate("/mi-perfil")
-    closeDropdown()
   }
 
   const handleSettingsClick = () => {
     navigate("/configuracion")
-    closeDropdown()
+  }
+
+  const getTitleByRole = (role) => {
+    switch (role) {
+      case "Administrador":
+        return "Dashboard Administrador"
+      case "Operador":
+        return "Panel de Operaciones"
+      default:
+        return "Portal de Cliente"
+    }
   }
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-3 sm:py-4">
-          {/* Lado izquierdo - Título y botón de menú */}
+          {/* Lado izquierdo - Solo título (sin botón de menú) */}
           <div className="flex items-center">
-            {/* Botón de menú móvil (opcional) */}
-            {onMenuToggle && (
-              <button
-                type="button"
-                className="mr-3 sm:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-                onClick={onMenuToggle}
-                aria-label="Abrir menú principal"
-              >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            )}
+            {/* Espacio reservado para el botón de menú del Sidebar en móvil */}
+            <div className="lg:hidden w-12"></div>
 
             {/* Título */}
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-                {userRole === "Administrador"
-                  ? "Dashboard Administrador"
-                  : userRole === "Operador"
-                    ? "Panel de Operaciones"
-                    : "Portal de Cliente"}
-              </h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{getTitleByRole(userRole)}</h1>
               <p className="text-sm text-gray-500 hidden sm:block">Bienvenido al panel de control</p>
             </div>
           </div>
 
           {/* Lado derecho - Búsqueda, notificaciones y perfil */}
           <div className="flex items-center justify-between sm:justify-end mt-3 sm:mt-0 space-x-4">
-            {/* Búsqueda (opcional) */}
+            {/* Búsqueda */}
             <div className="hidden md:block relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-              <input
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
                 type="text"
                 placeholder="Buscar..."
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-48 lg:w-64"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                className="pl-10 w-48 lg:w-64"
               />
             </div>
 
-            {/* Notificaciones (opcional) */}
-            <button
-              type="button"
-              className="p-1 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <span className="sr-only">Ver notificaciones</span>
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                />
-              </svg>
-              {isAuthenticated && (
-                <span className="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-              )}
-            </button>
+            {/* Notificaciones */}
+            <div className="relative">
+              <Button variant="ghost" size="sm" className="relative p-2">
+                <Bell className="h-5 w-5" />
+                <span className="sr-only">Ver notificaciones</span>
+                {isAuthenticated && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs p-0 flex items-center justify-center">
+                    3
+                  </Badge>
+                )}
+              </Button>
+            </div>
 
             {/* Perfil de usuario */}
-            <div className="relative">
-              <button
-                type="button"
-                className="flex items-center space-x-3 focus:outline-none"
-                onClick={toggleDropdown}
-                aria-expanded={isDropdownOpen}
-                aria-haspopup="true"
-              >
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">{userName.charAt(0)}</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-3 h-auto p-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-blue-600 text-white text-sm font-medium">
+                      {userName.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden sm:block text-left">
+                    <div className="text-sm font-medium text-gray-900">{userName}</div>
+                    <div className="text-xs text-gray-500">{userRole}</div>
                   </div>
-                </div>
-                <div className="hidden sm:block text-left">
-                  <div className="text-sm font-medium text-gray-900">{userName}</div>
-                  <div className="text-xs text-gray-500">{userRole}</div>
-                </div>
-                <svg
-                  className="hidden sm:block h-5 w-5 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Dropdown menu */}
-              {isDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" aria-hidden="true" onClick={closeDropdown} tabIndex={-1}></div>
-                  <div
-                    className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
-                    role="menu"
-                    aria-orientation="vertical"
-                    aria-labelledby="user-menu-button"
-                    tabIndex={-1}
-                  >
-                    <button
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      role="menuitem"
-                      tabIndex={-1}
-                      onClick={handleProfileClick}
-                    >
-                      Mi Perfil
-                    </button>
-                    <button
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      role="menuitem"
-                      tabIndex={-1}
-                      onClick={handleSettingsClick}
-                    >
-                      Configuración
-                    </button>
-                    <button
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      role="menuitem"
-                      tabIndex={-1}
-                      onClick={handleLogout}
-                    >
-                      Cerrar sesión
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                  <ChevronDown className="hidden sm:block h-4 w-4 text-gray-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleProfileClick}>
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Mi Perfil</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSettingsClick}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Configuración</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Cerrar sesión</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
