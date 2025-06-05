@@ -21,7 +21,7 @@ export function useHistorialConductor() {
    * @returns {Object} Headers con token de autorización
    */
   const getHeaders = useCallback(() => {
-    const token = localStorage.getItem("jwt")
+    const token = localStorage.getItem("translogitrack_token")
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

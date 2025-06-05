@@ -70,7 +70,7 @@ function PedidosAdmin() {
 
   // Estados para formularios
   const [formData, setFormData] = useState({
-    id_usuario:"",
+    id_usuario: "",
     id_ruta: "",
     id_camion: "",
     id_conductor: "",
@@ -201,6 +201,7 @@ function PedidosAdmin() {
   const handleCrearPedido = async () => {
     try {
       const data = {
+        id_usuario: Number.parseInt(formData.id_usuario), // Añadir esta línea
         id_ruta: Number.parseInt(formData.id_ruta),
         id_camion: Number.parseInt(formData.id_camion),
         id_conductor: Number.parseInt(formData.id_conductor),
@@ -213,6 +214,7 @@ function PedidosAdmin() {
       if (result.success) {
         setShowCreateDialog(false)
         setFormData({
+          id_usuario: "", // Añadir esta línea
           id_ruta: "",
           id_camion: "",
           id_conductor: "",
@@ -344,7 +346,7 @@ function PedidosAdmin() {
                     <SelectContent>
                       {usuarios.map((usuario) => (
                         <SelectItem key={usuario.id_usuario} value={usuario.id_usuario.toString()}>
-                          {usuario.nombre_completo} 
+                          {usuario.nombre_completo}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -357,12 +359,12 @@ function PedidosAdmin() {
                   <Select
                     value={formData.id_ruta}
                     onValueChange={(value) => {
-                      const rutaSeleccionada = rutas.find((r) => r.id_ruta.toString() === value);
+                      const rutaSeleccionada = rutas.find((r) => r.id_ruta.toString() === value)
                       setFormData((prev) => ({
                         ...prev,
                         id_ruta: value,
-                        precio: rutaSeleccionada ? rutaSeleccionada.precio : ""
-                      }));
+                        precio: rutaSeleccionada ? rutaSeleccionada.precio : "",
+                      }))
                     }}
                   >
                     <SelectTrigger>
