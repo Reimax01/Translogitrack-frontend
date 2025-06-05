@@ -4,6 +4,7 @@ import { useState } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useCamiones } from "../hooks/useCamiones"
+import { useMantenimiento } from "../hooks/useMantenimiento"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,7 +14,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Plus, Edit, Trash2, RefreshCw, Truck, Wrench, CheckCircle, XCircle } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  Edit,
+  Trash2,
+  RefreshCw,
+  Truck,
+  Wrench,
+  CheckCircle,
+  XCircle,
+  History,
+  Activity,
+  Settings,
+  AlertTriangle,
+  Clock,
+} from "lucide-react"
 
 function CamionesAdmin() {
   // Hook para gestionar camiones
@@ -27,7 +43,6 @@ function CamionesAdmin() {
     listarCamiones,
     crearCamion,
     actualizarCamion,
-    crearMantenimiento,
     desactivarCamion,
     cambiarPagina,
     limpiarError,
@@ -35,6 +50,17 @@ function CamionesAdmin() {
     validarPlaca,
     validarCapacidad,
   } = useCamiones()
+
+  // Hook para gestionar mantenimiento
+  const {
+    historialMantenimiento,
+    loading: mantenimientoLoading,
+    obtenerHistorialMantenimiento,
+    crearMantenimiento,
+    finalizarMantenimiento,
+    obtenerEstadisticas,
+    limpiarHistorial,
+  } = useMantenimiento()
 
   // Estados locales del componente
   const [filtros, setFiltros] = useState({
@@ -45,6 +71,7 @@ function CamionesAdmin() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showMantenimientoDialog, setShowMantenimientoDialog] = useState(false)
+  const [showHistorialDialog, setShowHistorialDialog] = useState(false)
   const [selectedCamion, setSelectedCamion] = useState(null)
 
   // Estados para formularios
@@ -78,8 +105,8 @@ function CamionesAdmin() {
   ]
 
   const tiposMantenimiento = [
-    { value: "preventivo", label: "Preventivo" },
-    { value: "correctivo", label: "Correctivo" },
+    { value: "preventivo", label: "Preventivo", icon: Settings },
+    { value: "correctivo", label: "Correctivo", icon: AlertTriangle },
   ]
 
   // Función para obtener badge del estado
@@ -94,6 +121,23 @@ function CamionesAdmin() {
       return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Activo</Badge>
     }
     return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Inactivo</Badge>
+  }
+
+  // Función para obtener badge del tipo de mantenimiento
+  const getMantenimientoBadge = (tipo) => {
+    const config = {
+      preventivo: { className: "bg-blue-100 text-blue-800", icon: Settings },
+      correctivo: { className: "bg-amber-100 text-amber-800", icon: AlertTriangle },
+    }
+
+    const { className, icon: Icon } = config[tipo] || config.preventivo
+
+    return (
+      <Badge className={`${className} hover:${className} flex items-center gap-1`}>
+        <Icon className="h-3 w-3" />
+        {tipo}
+      </Badge>
+    )
   }
 
   // Función para formatear fecha
@@ -191,11 +235,28 @@ function CamionesAdmin() {
     }
   }
 
+  // Manejador para finalizar mantenimiento
+  const handleFinalizarMantenimiento = async (mantenimientoId) => {
+    if (window.confirm("¿Está seguro de que desea finalizar este mantenimiento?")) {
+      const result = await finalizarMantenimiento(mantenimientoId)
+      if (result.success && selectedCamion) {
+        await obtenerHistorialMantenimiento(selectedCamion.id_camion)
+      }
+    }
+  }
+
   // Manejador para desactivar camión
   const handleDesactivarCamion = async (camion) => {
     if (window.confirm(`¿Está seguro de que desea desactivar el camión ${camion.placa}?`)) {
       await desactivarCamion(camion.id_camion)
     }
+  }
+
+  // Manejador para ver historial de mantenimiento
+  const handleVerHistorial = async (camion) => {
+    setSelectedCamion(camion)
+    setShowHistorialDialog(true)
+    await obtenerHistorialMantenimiento(camion.id_camion)
   }
 
   // Manejador para abrir dialog de edición
@@ -226,6 +287,9 @@ function CamionesAdmin() {
   const getMinDate = () => {
     return new Date().toISOString().split("T")[0]
   }
+
+  // Obtener estadísticas del historial de mantenimiento
+  const estadisticasMantenimiento = obtenerEstadisticas()
 
   return (
     <div className="space-y-6">
@@ -410,7 +474,7 @@ function CamionesAdmin() {
               <div>
                 <p className="text-sm font-medium text-green-600">Disponibles</p>
                 <p className="text-2xl font-bold text-green-900">
-                  {camiones.filter((c) => c.estado === "Disponible" && c.activo).length}
+                  {camiones.filter((c) => c.estado_operativo === "Disponible" && c.activo).length}
                 </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
@@ -423,7 +487,7 @@ function CamionesAdmin() {
               <div>
                 <p className="text-sm font-medium text-yellow-600">En Mantenimiento</p>
                 <p className="text-2xl font-bold text-yellow-900">
-                  {camiones.filter((c) => c.estado === "En mantenimiento" && c.activo).length}
+                  {camiones.filter((c) => c.estado_operativo === "En mantenimiento" && c.activo).length}
                 </p>
               </div>
               <Wrench className="h-8 w-8 text-yellow-600" />
@@ -478,16 +542,16 @@ function CamionesAdmin() {
                 <tbody>
                   {camiones.map((camion, index) => (
                     <tr
-                      key={camion.id}
+                      key={camion.id_camion}
                       className={`border-b hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                     >
-                      <td className="p-4 font-medium">{camion.id}</td>
+                      <td className="p-4 font-medium">{camion.id_camion}</td>
                       <td className="p-4 font-mono">{camion.placa}</td>
                       <td className="p-4">
                         {camion.capacidad_kg ? `${camion.capacidad_kg.toLocaleString()} kg` : "N/A"}
                       </td>
                       <td className="p-4">{camion.km_actual ? `${camion.km_actual} km` : "0 km"}</td>
-                      <td className="p-4">{getEstadoBadge(camion.estado)}</td>
+                      <td className="p-4">{getEstadoBadge(camion.estado_operativo)}</td>
                       <td className="p-4">{getActivoBadge(camion.activo)}</td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
@@ -509,6 +573,14 @@ function CamionesAdmin() {
                               <Wrench className="h-4 w-4 text-blue-500" />
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleVerHistorial(camion)}
+                            aria-label={`Ver historial de mantenimiento de ${camion.placa}`}
+                          >
+                            <History className="h-4 w-4" />
+                          </Button>
                           {camion.activo && (
                             <Button
                               variant="ghost"
@@ -564,7 +636,7 @@ function CamionesAdmin() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar Camión #{selectedCamion?.id}</DialogTitle>
+            <DialogTitle>Editar Camión #{selectedCamion?.id_camion}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -668,7 +740,10 @@ function CamionesAdmin() {
                 <SelectContent>
                   {tiposMantenimiento.map((tipo) => (
                     <SelectItem key={tipo.value} value={tipo.value}>
-                      {tipo.label}
+                      <div className="flex items-center gap-2">
+                        <tipo.icon className="h-4 w-4" />
+                        {tipo.label}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -705,11 +780,158 @@ function CamionesAdmin() {
             <Button variant="outline" onClick={() => setShowMantenimientoDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleCrearMantenimiento} disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleCrearMantenimiento} disabled={mantenimientoLoading}>
+              {mantenimientoLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Programar Mantenimiento
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de historial de mantenimiento */}
+      <Dialog open={showHistorialDialog} onOpenChange={setShowHistorialDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Historial de Mantenimiento - {selectedCamion?.placa}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Estadísticas del historial */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">Total</p>
+                    <p className="text-lg font-bold">{estadisticasMantenimiento.total}</p>
+                  </div>
+                  <Activity className="h-5 w-5 text-gray-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-blue-600">Preventivos</p>
+                    <p className="text-lg font-bold text-blue-900">{estadisticasMantenimiento.preventivos}</p>
+                  </div>
+                  <Settings className="h-5 w-5 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-amber-600">Correctivos</p>
+                    <p className="text-lg font-bold text-amber-900">{estadisticasMantenimiento.correctivos}</p>
+                  </div>
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-green-600">Completados</p>
+                    <p className="text-lg font-bold text-green-900">{estadisticasMantenimiento.completados}</p>
+                  </div>
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-yellow-600">Pendientes</p>
+                    <p className="text-lg font-bold text-yellow-900">{estadisticasMantenimiento.pendientes}</p>
+                  </div>
+                  <Clock className="h-5 w-5 text-yellow-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Timeline de historial */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Historial de Mantenimientos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {mantenimientoLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>Cargando historial...</span>
+                </div>
+              ) : historialMantenimiento.length > 0 ? (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {historialMantenimiento.map((mantenimiento, index) => {
+                    const tipoConfig = tiposMantenimiento.find((t) => t.value === mantenimiento.tipo)
+                    const Icon = tipoConfig?.icon || Wrench
+                    const isCompleted = !!mantenimiento.fecha_fin
+
+                    return (
+                      <div
+                        key={mantenimiento.id_mantenimiento}
+                        className="flex items-start gap-3 p-4 border rounded-lg"
+                      >
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-2">
+                            {getMantenimientoBadge(mantenimiento.tipo)}
+                            <div className="flex items-center gap-2">
+                              {isCompleted ? (
+                                <Badge className="bg-green-100 text-green-800">Completado</Badge>
+                              ) : (
+                                <Badge className="bg-yellow-100 text-yellow-800">En Progreso</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">{mantenimiento.descripcion}</p>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div>
+                              <span>Inicio: {formatearFecha(mantenimiento.fecha_inicio)}</span>
+                              {isCompleted && (
+                                <>
+                                  <span className="ml-4">Fin: {formatearFecha(mantenimiento.fecha_fin)}</span>
+                                  {mantenimiento.km && (
+                                    <span className="ml-4">KM: {mantenimiento.km.toLocaleString()}</span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            {!isCompleted && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleFinalizarMantenimiento(mantenimiento.id_mantenimiento)}
+                                disabled={mantenimientoLoading}
+                              >
+                                Finalizar
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Wrench className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Sin historial</h3>
+                  <p className="text-sm text-gray-500">No hay mantenimientos registrados para este camión.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </DialogContent>
       </Dialog>
     </div>

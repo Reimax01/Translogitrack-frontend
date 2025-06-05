@@ -72,8 +72,8 @@ export function useHistorialConductor() {
         }
 
         const data = await response.json()
-        const historialData = data.historial || []
-
+        const historialData = Array.isArray(data) ? data : data.historial || []
+        
         // Ordenar por fecha descendente
         historialData.sort((a, b) => new Date(b.fecha_evento) - new Date(a.fecha_evento))
 
