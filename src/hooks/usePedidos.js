@@ -1,67 +1,99 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { toast } from "@/hooks/use-toast"
+import { useState, useCallback, useEffect } from "react"
+import { useToast } from "./use-toast"
 
-// URL base de la API
 const API_BASE_URL = "https://translogitrack-server-production.up.railway.app/api/pedidos"
 const TOKEN_KEY = "translogitrack_token"
 
-/**
- * Hook personalizado para gestionar pedidos
- * @returns {Object} Estados y funciones para gestionar pedidos
- */
-export function usePedidos() {
-  // Estados del hook
+const usePedidos = () => {
   const [pedidos, setPedidos] = useState([])
+  const [pedidosOriginales, setPedidosOriginales] = useState([]) // Guardar todos los pedidos
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [totalPaginas, setTotalPaginas] = useState(0)
-  const [paginaActual, setPaginaActual] = useState(1)
   const [total, setTotal] = useState(0)
+  const [paginaActual, setPaginaActual] = useState(1)
+  const [totalPaginas, setTotalPaginas] = useState(1)
+  const [isUsingMockData, setIsUsingMockData] = useState(false)
+  const { toast } = useToast()
 
-  /**
-   * Función para obtener headers de autorización
-   * @returns {Object} Headers con token de autorización
-   */
+  // Función para obtener el token del localStorage
+  const getToken = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(TOKEN_KEY)
+    }
+    return null
+  }
+
+  // Función para construir los headers con el token
   const getHeaders = useCallback(() => {
-    const token = localStorage.getItem(TOKEN_KEY)
+    const token = getToken()
     return {
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     }
   }, [])
 
-  /**
-   * Función para manejar errores de autenticación
-   * @param {Response} response - Respuesta de fetch
-   */
-  const handleAuthError = useCallback((response) => {
-    if (response.status === 401) {
-      console.warn("Token expirado o inválido, redirigiendo a login...")
-      window.location.replace("/login")
+  // Función para manejar errores de autenticación
+  const handleAuthError = (response) => {
+    if (response.status === 401 || response.status === 403) {
+      console.warn("Token expirado o inválido, redirigiendo al login...")
+      localStorage.removeItem(TOKEN_KEY)
+      window.location.href = "/login"
       return true
     }
     return false
+  }
+
+  // Función para limpiar errores
+  const limpiarError = useCallback(() => {
+    setError(null)
   }, [])
 
-  /**
-   * Función para validar fecha de entrega estimada
-   * @param {string} fecha - Fecha en formato ISO
-   * @returns {boolean} - True si es válida
-   */
-  const validarFechaEntrega = useCallback((fecha) => {
-    if (!fecha) return false
-    const fechaEntrega = new Date(fecha)
-    const ahora = new Date()
-    return fechaEntrega > ahora
+  // Función para filtrar pedidos en el frontend
+  const filtrarPedidos = useCallback((todosPedidos, filtros) => {
+    let pedidosFiltrados = [...todosPedidos]
+
+    // Filtrar por cliente
+    if (filtros.id_cliente) {
+      const clienteId = Number.parseInt(filtros.id_cliente)
+      pedidosFiltrados = pedidosFiltrados.filter((p) => {
+        // Intentar múltiples formas de identificar al cliente
+        const pedidoClienteId =
+          p.id_cliente ||
+          p.cliente?.id_usuario ||
+          p.cliente?.id ||
+          p.id_usuario ||
+          p.usuario?.id_usuario ||
+          p.usuario?.id
+
+        console.log(`🔍 Comparando pedido ${p.id_pedido}: cliente=${pedidoClienteId} vs filtro=${clienteId}`)
+        return pedidoClienteId === clienteId
+      })
+      console.log(`📦 Filtrados ${pedidosFiltrados.length} pedidos para cliente ${filtros.id_cliente}`)
+    }
+
+    // Filtrar por estado
+    if (filtros.estado) {
+      pedidosFiltrados = pedidosFiltrados.filter((p) => p.estado === filtros.estado)
+    }
+
+    // Filtrar por fechas
+    if (filtros.fechaInicio) {
+      const fechaInicio = new Date(filtros.fechaInicio)
+      pedidosFiltrados = pedidosFiltrados.filter((p) => new Date(p.fecha_creacion) >= fechaInicio)
+    }
+
+    if (filtros.fechaFin) {
+      const fechaFin = new Date(filtros.fechaFin)
+      fechaFin.setHours(23, 59, 59, 999) // Incluir todo el día
+      pedidosFiltrados = pedidosFiltrados.filter((p) => new Date(p.fecha_creacion) <= fechaFin)
+    }
+
+    return pedidosFiltrados
   }, [])
 
-  /**
-   * Función para listar pedidos con filtros
-   * @param {Object} filtros - Filtros a aplicar
-   * @returns {Promise<void>}
-   */
+  // Función principal para listar pedidos
   const listarPedidos = useCallback(
     async (filtros = {}) => {
       setLoading(true)
@@ -75,16 +107,28 @@ export function usePedidos() {
         if (filtros.estado) queryParams.append("estado", filtros.estado)
         if (filtros.fechaInicio) queryParams.append("fechaInicio", filtros.fechaInicio)
         if (filtros.fechaFin) queryParams.append("fechaFin", filtros.fechaFin)
-        if (filtros.id_cliente) queryParams.append("id_cliente", filtros.id_cliente)
 
-        const response = await fetch(`${API_BASE_URL}?${queryParams.toString()}`, {
+        // Obtener el ID del cliente del usuario actual si está disponible
+        const userIdFromStorage = localStorage.getItem("user_id")
+        const clienteId = filtros.id_cliente || userIdFromStorage
+
+        // Añadir id_cliente a los parámetros si existe
+        if (clienteId) {
+          queryParams.append("id_cliente", clienteId)
+          console.log(`🔍 Añadiendo id_cliente=${clienteId} a la consulta`)
+        }
+
+        const url = `${API_BASE_URL}?${queryParams.toString()}`
+        console.log("🔗 URL:", url)
+
+        const response = await fetch(url, {
           method: "GET",
           headers: getHeaders(),
         })
 
         // Manejar error de autenticación
         if (handleAuthError(response)) {
-          return
+          return { success: false, error: "Error de autenticación" }
         }
 
         if (!response.ok) {
@@ -93,51 +137,87 @@ export function usePedidos() {
         }
 
         const data = await response.json()
+        console.log("📥 Respuesta del servidor:", data)
 
         // Validar estructura de respuesta
         if (!data.pedidos || !Array.isArray(data.pedidos)) {
           throw new Error("Estructura de respuesta inválida: falta array de pedidos")
         }
 
-        setPedidos(data.pedidos)
-        setTotal(data.total || 0)
-        setPaginaActual(data.pagina || 1)
-        setTotalPaginas(Math.ceil((data.total || 0) / (data.porPagina || 10)))
+        // Usar los pedidos tal como vienen de la API
+        const pedidosRecibidos = data.pedidos
+        console.log(`✅ Pedidos recibidos: ${pedidosRecibidos.length}`)
 
-        console.log("✅ Pedidos cargados:", data.pedidos.length)
+        // Mostrar información de cada pedido para debug
+        pedidosRecibidos.forEach((p) => {
+          console.log(`📦 Pedido #${p.id_pedido}: cliente=${p.id_cliente || p.cliente?.id_usuario}, estado=${p.estado}`)
+        })
+
+        setPedidos(pedidosRecibidos)
+        setTotal(data.total || pedidosRecibidos.length)
+        setPaginaActual(data.pagina || 1)
+        setTotalPaginas(
+          data.totalPaginas || Math.ceil((data.total || pedidosRecibidos.length) / (data.porPagina || 10)),
+        )
+        setIsUsingMockData(false)
+
+        return { success: true, data: pedidosRecibidos }
       } catch (err) {
         console.error("❌ Error al listar pedidos:", err.message)
         const errorMessage = err.message || "Error al cargar pedidos"
         setError(errorMessage)
+
+        // Usar datos mock en caso de error
+        const mockPedidos = generarDatosMock(filtros)
+        setPedidos(mockPedidos)
+        setTotal(mockPedidos.length)
+        setIsUsingMockData(true)
+
         toast({
-          title: "Error",
-          description: errorMessage,
+          title: "Advertencia",
+          description: "Usando datos de ejemplo. " + errorMessage,
           variant: "destructive",
         })
+
+        return { success: false, error: errorMessage }
       } finally {
         setLoading(false)
       }
     },
-    [getHeaders, handleAuthError],
+    [getHeaders, toast],
   )
 
-  /**
-   * Función para obtener un pedido por ID
-   * @param {number} id - ID del pedido
-   * @returns {Promise<Object>} - Resultado de la operación
-   */
+  // Función refetch simplificada
+  const refetch = useCallback(async () => {
+    console.log("🔄 Refetch: Recargando pedidos...")
+    // Intentar obtener el ID del usuario actual
+    const userIdFromStorage = localStorage.getItem("user_id")
+    const userRoleFromStorage = localStorage.getItem("user_role")
+
+    console.log(`🔍 Refetch con: userId=${userIdFromStorage}, role=${userRoleFromStorage}`)
+
+    // Si es cliente, filtrar por su ID
+    if (userRoleFromStorage === "Cliente") {
+      await listarPedidos({ id_cliente: userIdFromStorage })
+    } else {
+      // Para admin y operador, cargar todos
+      await listarPedidos()
+    }
+  }, [listarPedidos])
+
   const obtenerPedido = useCallback(
     async (id) => {
       setLoading(true)
       setError(null)
 
       try {
+        console.log("🔍 Obteniendo pedido ID:", id)
+
         const response = await fetch(`${API_BASE_URL}/${id}`, {
           method: "GET",
           headers: getHeaders(),
         })
 
-        // Manejar error de autenticación
         if (handleAuthError(response)) {
           return { success: false, error: "Error de autenticación" }
         }
@@ -148,51 +228,42 @@ export function usePedidos() {
         }
 
         const pedido = await response.json()
+        console.log("✅ Pedido obtenido:", pedido)
+
         return { success: true, data: pedido }
       } catch (err) {
         console.error("❌ Error al obtener pedido:", err.message)
         const errorMessage = err.message || "Error al obtener pedido"
         setError(errorMessage)
+
         toast({
           title: "Error",
           description: errorMessage,
           variant: "destructive",
         })
+
         return { success: false, error: errorMessage }
       } finally {
         setLoading(false)
       }
     },
-    [getHeaders, handleAuthError],
+    [getHeaders, toast],
   )
 
-  /**
-   * Función para crear un nuevo pedido
-   * @param {Object} data - Datos del pedido
-   * @returns {Promise<Object>} - Resultado de la operación
-   */
   const crearPedido = useCallback(
-    async (data) => {
+    async (pedidoData) => {
       setLoading(true)
       setError(null)
 
       try {
-        // Validaciones
-        if (!data.id_ruta || !data.id_camion || !data.id_conductor) {
-          throw new Error("Ruta, camión y conductor son obligatorios")
-        }
-
-        if (!validarFechaEntrega(data.fecha_entrega_estimada)) {
-          throw new Error("La fecha de entrega estimada debe ser posterior a la fecha actual")
-        }
+        console.log("📝 Creando pedido:", pedidoData)
 
         const response = await fetch(API_BASE_URL, {
           method: "POST",
           headers: getHeaders(),
-          body: JSON.stringify(data),
+          body: JSON.stringify(pedidoData),
         })
 
-        // Manejar error de autenticación
         if (handleAuthError(response)) {
           return { success: false, error: "Error de autenticación" }
         }
@@ -202,205 +273,39 @@ export function usePedidos() {
           throw new Error(errorText || `Error HTTP: ${response.status}`)
         }
 
-        const result = await response.json()
-        console.log("✅ Pedido creado:", result.id_pedido)
+        const nuevoPedido = await response.json()
+        setPedidos((prevPedidos) => [nuevoPedido, ...prevPedidos])
+        setPedidosOriginales((prevPedidos) => [nuevoPedido, ...prevPedidos])
+        setTotal((prevTotal) => prevTotal + 1)
+
+        console.log("✅ Pedido creado:", nuevoPedido)
 
         toast({
-          title: "Pedido creado",
-          description: "El pedido se ha creado exitosamente",
+          title: "¡Éxito!",
+          description: "Pedido creado correctamente",
         })
 
-        // Refrescar lista
-        await listarPedidos({ page: paginaActual })
-
-        return { success: true, data: result }
+        return { success: true, data: nuevoPedido }
       } catch (err) {
         console.error("❌ Error al crear pedido:", err.message)
         const errorMessage = err.message || "Error al crear pedido"
         setError(errorMessage)
+
         toast({
           title: "Error",
           description: errorMessage,
           variant: "destructive",
         })
+
         return { success: false, error: errorMessage }
       } finally {
         setLoading(false)
       }
     },
-    [getHeaders, handleAuthError, validarFechaEntrega, listarPedidos, paginaActual],
+    [getHeaders, toast],
   )
 
-  /**
-   * Función para actualizar un pedido
-   * @param {number} id - ID del pedido
-   * @param {Object} data - Datos a actualizar
-   * @returns {Promise<Object>} - Resultado de la operación
-   */
-  const actualizarPedido = useCallback(
-    async (id, data) => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/${id}`, {
-          method: "PUT",
-          headers: getHeaders(),
-          body: JSON.stringify(data),
-        })
-
-        // Manejar error de autenticación
-        if (handleAuthError(response)) {
-          return { success: false, error: "Error de autenticación" }
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(errorText || `Error HTTP: ${response.status}`)
-        }
-
-        const result = await response.json()
-        console.log("✅ Pedido actualizado:", result.id_pedido)
-
-        toast({
-          title: "Pedido actualizado",
-          description: "Los cambios se han guardado correctamente",
-        })
-
-        // Refrescar lista
-        await listarPedidos({ page: paginaActual })
-
-        return { success: true, data: result }
-      } catch (err) {
-        console.error("❌ Error al actualizar pedido:", err.message)
-        const errorMessage = err.message || "Error al actualizar pedido"
-        setError(errorMessage)
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        })
-        return { success: false, error: errorMessage }
-      } finally {
-        setLoading(false)
-      }
-    },
-    [getHeaders, handleAuthError, listarPedidos, paginaActual],
-  )
-
-  /**
-   * Función para eliminar un pedido (solo si está en estado Pendiente)
-   * @param {number} id - ID del pedido
-   * @returns {Promise<Object>} - Resultado de la operación
-   */
-  const eliminarPedido = useCallback(
-    async (id) => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/${id}`, {
-          method: "DELETE",
-          headers: getHeaders(),
-        })
-
-        // Manejar error de autenticación
-        if (handleAuthError(response)) {
-          return { success: false, error: "Error de autenticación" }
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(errorText || `Error HTTP: ${response.status}`)
-        }
-
-        console.log("✅ Pedido eliminado:", id)
-
-        toast({
-          title: "Pedido eliminado",
-          description: "El pedido ha sido eliminado correctamente",
-        })
-
-        // Refrescar lista
-        await listarPedidos({ page: paginaActual })
-
-        return { success: true }
-      } catch (err) {
-        console.error("❌ Error al eliminar pedido:", err.message)
-        const errorMessage = err.message || "Error al eliminar pedido"
-        setError(errorMessage)
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        })
-        return { success: false, error: errorMessage }
-      } finally {
-        setLoading(false)
-      }
-    },
-    [getHeaders, handleAuthError, listarPedidos, paginaActual],
-  )
-
-  /**
-   * Función para actualizar ubicación de un pedido
-   * @param {number} id - ID del pedido
-   * @param {Object} ubicacion - Coordenadas de ubicación
-   * @returns {Promise<Object>} - Resultado de la operación
-   */
-  const actualizarUbicacion = useCallback(
-    async (id, ubicacion) => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/${id}/ubicacion`, {
-          method: "POST",
-          headers: getHeaders(),
-          body: JSON.stringify(ubicacion),
-        })
-
-        // Manejar error de autenticación
-        if (handleAuthError(response)) {
-          return { success: false, error: "Error de autenticación" }
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(errorText || `Error HTTP: ${response.status}`)
-        }
-
-        console.log("✅ Ubicación actualizada para pedido:", id)
-
-        toast({
-          title: "Ubicación actualizada",
-          description: "La ubicación del pedido se ha actualizado correctamente",
-        })
-
-        return { success: true }
-      } catch (err) {
-        console.error("❌ Error al actualizar ubicación:", err.message)
-        const errorMessage = err.message || "Error al actualizar ubicación"
-        setError(errorMessage)
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        })
-        return { success: false, error: errorMessage }
-      } finally {
-        setLoading(false)
-      }
-    },
-    [getHeaders, handleAuthError],
-  )
-
-  /**
-   * Función para cambiar página
-   * @param {number} nuevaPagina - Nueva página
-   * @param {Object} filtros - Filtros actuales
-   * @returns {Promise<void>}
-   */
+  // Función para cambiar página
   const cambiarPagina = useCallback(
     async (nuevaPagina, filtros = {}) => {
       await listarPedidos({ ...filtros, page: nuevaPagina })
@@ -408,48 +313,86 @@ export function usePedidos() {
     [listarPedidos],
   )
 
-  /**
-   * Función para limpiar errores
-   */
-  const limpiarError = useCallback(() => {
-    setError(null)
-  }, [])
-
-  /**
-   * Función para recargar datos
-   */
+  // Función para recargar datos
   const recargarDatos = useCallback(() => {
-    listarPedidos({ page: paginaActual })
-  }, [listarPedidos, paginaActual])
+    listarPedidos()
+  }, [listarPedidos])
 
-  // Cargar pedidos inicialmente
+  // Función para usar datos mock
+  const useMockData = useCallback(() => {
+    const mockPedidos = generarDatosMock()
+    setPedidos(mockPedidos)
+    setTotal(mockPedidos.length)
+    setIsUsingMockData(true)
+    setError(null)
+
+    toast({
+      title: "Datos de ejemplo cargados",
+      description: "Se han cargado datos de ejemplo para demostración",
+    })
+  }, [toast])
+
+  // Función para generar datos mock
+  const generarDatosMock = (filtros = {}) => {
+    const estados = ["Pendiente", "En tránsito", "Entregado", "Cancelado"]
+    const clientes = [
+      { id_usuario: 1, nombre_completo: "Juan Pérez" },
+      { id_usuario: 2, nombre_completo: "María García" },
+      { id_usuario: 3, nombre_completo: "Carlos López" },
+    ]
+    const rutas = [
+      { origen: "Lima", destino: "Arequipa", distancia_km: 1009 },
+      { origen: "Lima", destino: "Trujillo", distancia_km: 558 },
+      { origen: "Cusco", destino: "Lima", distancia_km: 1165 },
+    ]
+
+    let mockPedidos = Array.from({ length: 15 }, (_, index) => ({
+      id_pedido: index + 1,
+      id_cliente: clientes[index % clientes.length].id_usuario,
+      cliente: clientes[index % clientes.length],
+      ruta: rutas[index % rutas.length],
+      estado: estados[index % estados.length],
+      fecha_creacion: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      fecha_entrega_estimada: new Date(Date.now() + Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      precio: Math.floor(Math.random() * 500) + 100,
+      nro_guia: `TLT${String(index + 1).padStart(6, "0")}`,
+      observaciones: index % 3 === 0 ? "Entrega urgente" : null,
+    }))
+
+    // Aplicar filtros si existen
+    if (filtros.id_cliente) {
+      mockPedidos = mockPedidos.filter((p) => p.id_cliente === Number.parseInt(filtros.id_cliente))
+    }
+    if (filtros.estado) {
+      mockPedidos = mockPedidos.filter((p) => p.estado === filtros.estado)
+    }
+
+    return mockPedidos
+  }
+
+  // Cargar pedidos automáticamente al montar el componente
   useEffect(() => {
+    console.log("🚀 usePedidos: Cargando pedidos automáticamente...")
     listarPedidos()
   }, [listarPedidos])
 
   return {
-    // Estados
     pedidos,
     loading,
     error,
-    totalPaginas,
-    paginaActual,
     total,
-
-    // Funciones CRUD
+    paginaActual,
+    totalPaginas,
+    isUsingMockData,
     listarPedidos,
     obtenerPedido,
     crearPedido,
-    actualizarPedido,
-    eliminarPedido,
-    actualizarUbicacion,
-
-    // Funciones auxiliares
     cambiarPagina,
     limpiarError,
     recargarDatos,
-    validarFechaEntrega,
+    useMockData,
+    refetch, // Añadir refetch al return
   }
 }
 
-export default usePedidos
+export { usePedidos }

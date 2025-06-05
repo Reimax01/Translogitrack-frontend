@@ -1,6 +1,12 @@
 "use client"
 
-function PedidosRecientes({ pedidos, loading, onVerMas }) {
+function PedidosRecientes({
+  pedidos,
+  loading,
+  onVerMas,
+  titulo = "Pedidos Recientes",
+  descripcion = "Últimos pedidos registrados en el sistema",
+}) {
   // Función para obtener el color del estado
   const getEstadoColor = (estado) => {
     switch (estado) {
@@ -19,10 +25,10 @@ function PedidosRecientes({ pedidos, loading, onVerMas }) {
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200">
         <div>
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Pedidos Recientes</h3>
-          <p className="mt-1 text-sm text-gray-500">Últimos pedidos registrados en el sistema</p>
+          <h3 className="text-lg leading-6 font-medium text-gray-900">{titulo}</h3>
+          <p className="mt-1 text-sm text-gray-500">{descripcion}</p>
         </div>
-        {onVerMas && (
+        {onVerMas && pedidos.length > 0 && (
           <button onClick={onVerMas} className="text-sm font-medium text-blue-600 hover:text-blue-500">
             Ver todos
           </button>
@@ -71,7 +77,9 @@ function PedidosRecientes({ pedidos, loading, onVerMas }) {
               {pedidos.map((pedido, index) => (
                 <tr key={pedido.id_pedido} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pedido.id_pedido}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{pedido.cliente?.nombre_completo || "N/A"}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {pedido.cliente?.nombre_completo || "N/A"}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(
@@ -81,10 +89,14 @@ function PedidosRecientes({ pedidos, loading, onVerMas }) {
                       {pedido.estado}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{pedido.fecha_creacion}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {new Date(pedido.fecha_creacion).toLocaleDateString()}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button className="text-blue-600 hover:text-blue-900 mr-3">Ver</button>
-                    <button className="text-green-600 hover:text-green-900">Editar</button>
+                    {pedido.estado === "En tránsito" && (
+                      <button className="text-green-600 hover:text-green-900">Rastrear</button>
+                    )}
                   </td>
                 </tr>
               ))}

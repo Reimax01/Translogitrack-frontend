@@ -1,7 +1,7 @@
 "use client"
 import { Routes, Route, Navigate } from "react-router-dom"
 import Login from "./components/Login"
-import Dashboard from "./components/Dashboard"
+import RoleBasedDashboard from "./components/RoleBasedDashboard"
 import PedidosAdmin from "./components/PedidosAdmin"
 import ConductoresAdmin from "./components/ConductoresAdmin"
 import CamionesAdmin from "./components/CamionesAdmin"
@@ -16,6 +16,9 @@ import Configuracion from "./components/Configuracion"
 import ResetPassword from "./components/ResetPassword"
 import RegistroCliente from "./components/RegistroCliente"
 import RecuperarContrasena from "./components/RecuperarContrasena"
+import MisPedidos from "./components/MisPedidos"
+import NuevoPedido from "./components/NuevoPedido"
+import SeguimientoPedidos from "./components/SeguimientoPedidos"
 
 function App() {
   return (
@@ -39,18 +42,90 @@ function App() {
         }
       >
         {/* Ruta por defecto del dashboard */}
-        <Route index element={<Dashboard />} />
+        <Route index element={<RoleBasedDashboard />} />
 
-        {/* Rutas específicas del dashboard */}
-        <Route path="usuarios" element={<UsuariosAdmin />} />
-        <Route path="pedidos" element={<PedidosAdmin />} />
-        <Route path="conductores" element={<ConductoresAdmin />} />
-        <Route path="camiones" element={<CamionesAdmin />} />
-        <Route path="rutas" element={<RutasAdmin />} />
-        <Route path="reportes" element={<Reportes />} />
+        {/* Rutas para ADMINISTRADORES */}
+        <Route
+          path="usuarios"
+          element={
+            <PrivateRoute requiredRole="Administrador">
+              <UsuariosAdmin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="reportes"
+          element={
+            <PrivateRoute requiredRole="Administrador">
+              <Reportes />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="configuracion"
+          element={
+            <PrivateRoute requiredRole="Administrador">
+              <Configuracion />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Rutas para ADMINISTRADORES y OPERADORES */}
+        <Route
+          path="pedidos"
+          element={
+            <PrivateRoute requiredRoles={["Administrador", "Operador"]}>
+              <PedidosAdmin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="conductores"
+          element={
+            <PrivateRoute requiredRoles={["Administrador", "Operador"]}>
+              <ConductoresAdmin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="camiones"
+          element={
+            <PrivateRoute requiredRoles={["Administrador", "Operador"]}>
+              <CamionesAdmin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="rutas"
+          element={
+            <PrivateRoute requiredRoles={["Administrador", "Operador"]}>
+              <RutasAdmin />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Rutas para CLIENTES */}
+        <Route
+          path="mis-pedidos"
+          element={
+            <PrivateRoute requiredRole="Cliente">
+              <MisPedidos />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="nuevo-pedido"
+          element={
+            <PrivateRoute requiredRole="Cliente">
+              <NuevoPedido />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Rutas para TODOS los usuarios autenticados */}
+        <Route path="seguimiento" element={<SeguimientoPedidos />} />
         <Route path="mi-perfil" element={<MiPerfil />} />
         <Route path="cambiar-contrasena" element={<CambiarContrasena />} />
-        <Route path="configuracion" element={<Configuracion />} />
       </Route>
 
       {/* Ruta catch-all para páginas no encontradas */}

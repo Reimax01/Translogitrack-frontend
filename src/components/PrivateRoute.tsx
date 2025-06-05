@@ -7,9 +7,10 @@ import { useAuth } from "../hooks/useAuth"
 interface PrivateRouteProps {
   children: ReactNode
   requiredRole?: "Administrador" | "Operador" | "Cliente"
+  requiredRoles?: ("Administrador" | "Operador" | "Cliente")[]
 }
 
-function PrivateRoute({ children, requiredRole }: PrivateRouteProps) {
+function PrivateRoute({ children, requiredRole, requiredRoles }: PrivateRouteProps) {
   const { isAuthenticated, loading, user } = useAuth()
 
   // Mostrar loading mientras se verifica la autenticación
@@ -38,13 +39,32 @@ function PrivateRoute({ children, requiredRole }: PrivateRouteProps) {
     return <Navigate to="/login" replace />
   }
 
-  // Verificar rol si es requerido (usando 'rol' en lugar de 'role')
-  if (requiredRole && user?.rol !== requiredRole) {
+  // Obtener el rol del usuario (compatible con diferentes estructuras)
+  const userRole = user?.rol || user?.tipo_usuario
+
+  // Verificar rol específico si se requiere
+  if (requiredRole && userRole !== requiredRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
-          <p className="text-gray-600">No tienes permisos para acceder a esta sección.</p>
+          <p className="text-gray-600 mb-2">No tienes permisos para acceder a esta sección.</p>
+          <p className="text-sm text-gray-500">Rol requerido: {requiredRole}</p>
+          <p className="text-sm text-gray-500">Tu rol actual: {userRole || "No definido"}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Verificar múltiples roles si se requiere
+  if (requiredRoles && Array.isArray(requiredRoles) && !requiredRoles.includes(userRole as any)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
+          <p className="text-gray-600 mb-2">No tienes permisos para acceder a esta sección.</p>
+          <p className="text-sm text-gray-500">Roles permitidos: {requiredRoles.join(", ")}</p>
+          <p className="text-sm text-gray-500">Tu rol actual: {userRole || "No definido"}</p>
         </div>
       </div>
     )

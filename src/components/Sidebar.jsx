@@ -2,57 +2,149 @@
 
 import { useState } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { useAuth } from "../hooks/useAuth"
+import useAuth from "@/hooks/useAuth" // Cambié a default import
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { LayoutDashboard, Users, Package, UserCheck, Truck, Route, BarChart3, LogOut, Menu } from "lucide-react"
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  UserCheck,
+  Truck,
+  Route,
+  BarChart3,
+  LogOut,
+  Menu,
+  MapPin,
+  Plus,
+  Settings,
+  User,
+} from "lucide-react"
 
 function Sidebar({ activeItem, onItemClick, className = "" }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout, user } = useAuth()
+  const { logout, user } = useAuth() // Ahora usando el mismo patrón que Header
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
-  // Configuración de los ítems del menú con rutas
-  const menuItems = [
-    {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      name: "Usuarios",
-      href: "/dashboard/usuarios",
-      icon: Users,
-    },
-    {
-      name: "Pedidos",
-      href: "/dashboard/pedidos",
-      icon: Package,
-    },
-    {
-      name: "Conductores",
-      href: "/dashboard/conductores",
-      icon: UserCheck,
-    },
-    {
-      name: "Camiones",
-      href: "/dashboard/camiones",
-      icon: Truck,
-    },
-    {
-      name: "Rutas",
-      href: "/dashboard/rutas",
-      icon: Route,
-    },
-    {
-      name: "Reportes",
-      href: "/dashboard/reportes",
-      icon: BarChart3,
-    },
-  ]
+
+  // Determinar el rol del usuario
+  const userRole = user?.rol || "Usuario"
+  const isAdmin = userRole === "Administrador"
+  const isOperator = userRole === "Operador"
+  const isClient = userRole === "Cliente"
+
+  // Configuración de los ítems del menú según el rol
+  const getMenuItems = () => {
+    const baseItems = [
+      {
+        name: "Dashboard",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        roles: ["Administrador", "Operador", "Cliente"],
+      },
+    ]
+
+    // Items para Administradores
+    const adminItems = [
+      {
+        name: "Usuarios",
+        href: "/dashboard/usuarios",
+        icon: Users,
+        roles: ["Administrador"],
+      },
+      {
+        name: "Reportes",
+        href: "/dashboard/reportes",
+        icon: BarChart3,
+        roles: ["Administrador"],
+      },
+      {
+        name: "Configuración",
+        href: "/dashboard/configuracion",
+        icon: Settings,
+        roles: ["Administrador"],
+      },
+    ]
+
+    // Items para Administradores y Operadores
+    const operationalItems = [
+      {
+        name: "Pedidos",
+        href: "/dashboard/pedidos",
+        icon: Package,
+        roles: ["Administrador", "Operador"],
+      },
+      {
+        name: "Conductores",
+        href: "/dashboard/conductores",
+        icon: UserCheck,
+        roles: ["Administrador", "Operador"],
+      },
+      {
+        name: "Camiones",
+        href: "/dashboard/camiones",
+        icon: Truck,
+        roles: ["Administrador", "Operador"],
+      },
+      {
+        name: "Rutas",
+        href: "/dashboard/rutas",
+        icon: Route,
+        roles: ["Administrador", "Operador"],
+      },
+    ]
+
+    // Items para Clientes
+    const clientItems = [
+      {
+        name: "Mis Pedidos",
+        href: "/dashboard/mis-pedidos",
+        icon: Package,
+        roles: ["Cliente"],
+      },
+      {
+        name: "Nuevo Pedido",
+        href: "/dashboard/nuevo-pedido",
+        icon: Plus,
+        roles: ["Cliente"],
+      },
+    ]
+
+    // Items comunes para todos
+    const commonItems = [
+      {
+        name: "Seguimiento",
+        href: "/dashboard/seguimiento",
+        icon: MapPin,
+        roles: ["Administrador", "Operador", "Cliente"],
+      },
+      {
+        name: "Mi Perfil",
+        href: "/dashboard/mi-perfil",
+        icon: User,
+        roles: ["Administrador", "Operador", "Cliente"],
+      },
+    ]
+
+    // Combinar items según el rol
+    let allItems = [...baseItems]
+
+    if (isAdmin) {
+      allItems = [...allItems, ...adminItems, ...operationalItems, ...commonItems]
+    } else if (isOperator) {
+      allItems = [...allItems, ...operationalItems, ...commonItems]
+    } else if (isClient) {
+      allItems = [...allItems, ...clientItems, ...commonItems]
+    }
+
+    // Filtrar items que el usuario puede ver
+    return allItems.filter((item) => item.roles.includes(userRole))
+  }
+
+  const menuItems = getMenuItems()
 
   // Función para manejar el clic en un ítem
   const handleItemClick = (item) => {
@@ -94,10 +186,11 @@ function Sidebar({ activeItem, onItemClick, className = "" }) {
           </div>
           <div className="text-white">
             <h1 className="text-lg font-semibold">TransLogiTrack</h1>
-            <p className="text-xs text-gray-300">Sistema de Gestión</p>
+            <p className="text-xs text-gray-300">
+              {isAdmin ? "Administración" : isOperator ? "Operaciones" : "Cliente"}
+            </p>
           </div>
         </div>
-        {/* El botón de cerrar ahora lo maneja el Sheet automáticamente */}
       </div>
 
       {/* Navegación */}
@@ -144,19 +237,32 @@ function Sidebar({ activeItem, onItemClick, className = "" }) {
         </Button>
       </nav>
 
-      {/* Footer del sidebar */}
+      {/* Footer del sidebar - Información del usuario */}
       <div className="p-4 bg-gray-900">
-        <div className="flex items-center space-x-3">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-gray-600 text-white text-sm">
-              {user?.nombre?.charAt(0) || user?.correo?.charAt(0) || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="text-white text-sm min-w-0 flex-1">
-            <p className="font-medium truncate">{user?.nombre || "Usuario"}</p>
-            <p className="text-xs text-gray-400 truncate">{user?.correo || "usuario@translogitrack.com"}</p>
+        {user ? (
+          <div className="flex items-center space-x-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-gray-600 text-white text-sm">
+                {(user?.nombre_completo || user?.nombre || "Usuario").charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="text-white text-sm min-w-0 flex-1">
+              <p className="font-medium truncate">{user?.nombre_completo || user?.nombre || "Usuario"}</p>
+              <p className="text-xs text-gray-400 truncate">{user?.correo || "usuario@translogitrack.com"}</p>
+              <p className="text-xs text-blue-300 truncate">{userRole}</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center space-x-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-gray-600 text-white text-sm">?</AvatarFallback>
+            </Avatar>
+            <div className="text-white text-sm min-w-0 flex-1">
+              <p className="font-medium truncate">Cargando...</p>
+              <p className="text-xs text-gray-400 truncate">Verificando sesión</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

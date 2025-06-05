@@ -1,4 +1,10 @@
-function AlertasCard({ alertas = [], loading = false }) {
+"use client"
+
+import { useAlertas } from "../../hooks/useAlertas"
+
+function AlertasCard({ alertas = [], loading = false, titulo = "Alertas del Sistema" }) {
+  const { marcarComoLeida } = useAlertas()
+
   // Si no hay alertas y no está cargando, mostrar mensaje predeterminado
   if (!loading && alertas.length === 0) {
     alertas = [
@@ -106,6 +112,12 @@ function AlertasCard({ alertas = [], loading = false }) {
     }
   }
 
+  const handleDismiss = async (alertaId) => {
+    if (alertaId !== "default") {
+      await marcarComoLeida(alertaId)
+    }
+  }
+
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
@@ -117,9 +129,9 @@ function AlertasCard({ alertas = [], loading = false }) {
               clipRule="evenodd"
             />
           </svg>
-          Alertas del Sistema
+          {titulo}
         </h3>
-        <p className="mt-1 text-sm text-gray-500">Notificaciones y alertas importantes que requieren atención</p>
+        <p className="mt-1 text-sm text-gray-500">Notificaciones importantes que requieren atención</p>
       </div>
 
       {/* Estado de carga */}
@@ -141,21 +153,50 @@ function AlertasCard({ alertas = [], loading = false }) {
 
       {/* Lista de alertas */}
       {!loading && (
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
           {alertas.map((alerta) => (
             <div key={alerta.id} className={`p-4 ${getTipoAlertaColor(alerta.tipo)}`}>
               <div className="flex">
                 <div className="flex-shrink-0">{getTipoAlertaIcon(alerta.tipo)}</div>
                 <div className="ml-3 flex-1">
                   <p className="text-sm font-medium">{alerta.mensaje}</p>
+                  {alerta.accion && (
+                    <p className="mt-1 text-xs font-medium opacity-90">💡 Acción recomendada: {alerta.accion}</p>
+                  )}
+                  {alerta.prioridad && (
+                    <span
+                      className={`inline-block mt-1 px-2 py-1 text-xs rounded-full ${
+                        alerta.prioridad === "alta"
+                          ? "bg-red-100 text-red-700"
+                          : alerta.prioridad === "media"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      Prioridad: {alerta.prioridad}
+                    </span>
+                  )}
                   <p className="mt-1 text-xs opacity-75">{formatearFecha(alerta.fecha)}</p>
+                  {alerta.detalles && alerta.detalles.length > 0 && (
+                    <div className="mt-2">
+                      <details className="text-xs">
+                        <summary className="cursor-pointer font-medium">Ver detalles</summary>
+                        <ul className="mt-1 ml-4 list-disc">
+                          {alerta.detalles.map((detalle, index) => (
+                            <li key={index}>{detalle}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    </div>
+                  )}
                 </div>
                 {alerta.id !== "default" && (
                   <div className="ml-auto pl-3">
                     <div className="-mx-1.5 -my-1.5">
                       <button
                         type="button"
-                        className="inline-flex rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2"
+                        onClick={() => handleDismiss(alerta.id)}
+                        className="inline-flex rounded-md p-1.5 hover:bg-black hover:bg-opacity-10 focus:outline-none focus:ring-2 focus:ring-offset-2"
                       >
                         <span className="sr-only">Descartar</span>
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -179,3 +220,4 @@ function AlertasCard({ alertas = [], loading = false }) {
 }
 
 export default AlertasCard
+
