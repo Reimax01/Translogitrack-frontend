@@ -95,7 +95,7 @@ const ResetPassword = () => {
     setMessage({ type: "", text: "" })
 
     try {
-      const response = await fetch("https://translogitrack-server-production.up.railway.app/api/auth/reset-password", {
+      const response = await fetch("https://translogitrack-server-production.up.railway.app/auth/reset-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
