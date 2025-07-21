@@ -55,7 +55,6 @@ function PedidosAdmin() {
     fechaInicio: "",
     fechaFin: "",
   })
-
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showDetailDialog, setShowDetailDialog] = useState(false)
@@ -79,10 +78,16 @@ function PedidosAdmin() {
     precio: "",
   })
 
+  // Cambié editData para incluir todos los campos necesarios
   const [editData, setEditData] = useState({
+    id_usuario: "", // Este es el ID del cliente, pero lo llamamos id_usuario en el frontend
+    id_ruta: "",
+    id_camion: "",
+    id_conductor: "",
     estado: "",
     observaciones: "",
     fecha_entrega_real: "",
+    fecha_entrega_estimada: "",
     precio: "",
     nro_guia: "",
   })
@@ -147,6 +152,34 @@ function PedidosAdmin() {
     cargarDatosRelacionados()
   }, [])
 
+  // Cargar todos los camiones cuando se abre el diálogo de edición
+  useEffect(() => {
+    if (showEditDialog) {
+      const cargarTodosCamiones = async () => {
+        try {
+          const headers = {
+            Authorization: `Bearer ${localStorage.getItem("translogitrack_token")}`,
+            "Content-Type": "application/json",
+          }
+
+          // Cargar todos los camiones (no solo los disponibles)
+          const camionesRes = await fetch("https://translogitrack-server-production.up.railway.app/api/camiones", {
+            headers,
+          })
+
+          if (camionesRes.ok) {
+            const camionesData = await camionesRes.json()
+            setCamiones(camionesData.camiones || [])
+          }
+        } catch (err) {
+          console.error("Error al cargar todos los camiones:", err)
+        }
+      }
+
+      cargarTodosCamiones()
+    }
+  }, [showEditDialog])
+
   // Función para obtener badge del estado
   const getEstadoBadge = (estado) => {
     const estadoConfig = estadoOptions.find((e) => e.value === estado) || estadoOptions[0]
@@ -201,7 +234,7 @@ function PedidosAdmin() {
   const handleCrearPedido = async () => {
     try {
       const data = {
-        id_usuario: Number.parseInt(formData.id_usuario), // Añadir esta línea
+        id_usuario: Number.parseInt(formData.id_usuario),
         id_ruta: Number.parseInt(formData.id_ruta),
         id_camion: Number.parseInt(formData.id_camion),
         id_conductor: Number.parseInt(formData.id_conductor),
@@ -209,12 +242,11 @@ function PedidosAdmin() {
         ...(formData.observaciones && { observaciones: formData.observaciones }),
         ...(formData.precio && { precio: Number.parseFloat(formData.precio) }),
       }
-
       const result = await crearPedido(data)
       if (result.success) {
         setShowCreateDialog(false)
         setFormData({
-          id_usuario: "", // Añadir esta línea
+          id_usuario: "",
           id_ruta: "",
           id_camion: "",
           id_conductor: "",
@@ -222,39 +254,142 @@ function PedidosAdmin() {
           observaciones: "",
           precio: "",
         })
+        await recargarDatos()
       }
     } catch (err) {
       console.error("Error al crear pedido:", err)
     }
   }
 
-  // Manejador para editar pedido
+  // Manejador para editar pedido - CORREGIDO BASADO EN EL CÓDIGO ORIGINAL Y EL ENDPOINT
   const handleEditarPedido = async () => {
     if (!selectedPedido) return
-
     try {
-      const data = {
-        ...(editData.estado && { estado: editData.estado }),
-        ...(editData.observaciones && { observaciones: editData.observaciones }),
-        ...(editData.fecha_entrega_real && { fecha_entrega_real: editData.fecha_entrega_real }),
-        ...(editData.precio && { precio: Number.parseFloat(editData.precio) }),
-        ...(editData.nro_guia && { nro_guia: editData.nro_guia }),
+      console.log("=== INICIO EDICIÓN ===")
+      console.log("Pedido original (selectedPedido):", selectedPedido)
+      console.log("Datos del formulario (editData) ANTES de procesar:", editData)
+
+      // Función auxiliar para validar y parsear IDs
+      const validarId = (valor, nombreCampo) => {
+        const num = Number.parseInt(valor)
+        if (isNaN(num) || num <= 0) {
+          console.warn(`⚠️ ${nombreCampo} no es válido o está vacío:`, valor)
+          return null
+        }
+        return num
       }
 
+      // Construir el objeto para la actualización
+      const data = {}
+
+      // Cliente (id_cliente) - Usamos editData.id_usuario del frontend, pero lo mapeamos a id_cliente para el backend
+      if (editData.id_usuario) {
+        const parsedId = validarId(editData.id_usuario, "id_cliente")
+        data.id_cliente = parsedId !== null ? parsedId : selectedPedido.id_cliente || selectedPedido.id_usuario
+      } else {
+        data.id_cliente = selectedPedido.id_cliente || selectedPedido.id_usuario
+      }
+
+      // Ruta (id_ruta)
+      if (editData.id_ruta) {
+        const parsedId = validarId(editData.id_ruta, "id_ruta")
+        data.id_ruta = parsedId !== null ? parsedId : selectedPedido.id_ruta
+      } else {
+        data.id_ruta = selectedPedido.id_ruta
+      }
+
+      // Camión (id_camion)
+      if (editData.id_camion) {
+        const parsedId = validarId(editData.id_camion, "id_camion")
+        data.id_camion = parsedId !== null ? parsedId : selectedPedido.id_camion
+      } else {
+        data.id_camion = selectedPedido.id_camion
+      }
+
+      // Conductor (id_conductor)
+      if (editData.id_conductor) {
+        const parsedId = validarId(editData.id_conductor, "id_conductor")
+        data.id_conductor = parsedId !== null ? parsedId : selectedPedido.id_conductor
+      } else {
+        data.id_conductor = selectedPedido.id_conductor
+      }
+
+      // Estado
+      data.estado = editData.estado?.trim() || selectedPedido.estado
+
+      // Observaciones
+      data.observaciones =
+        editData.observaciones !== undefined ? editData.observaciones.trim() : selectedPedido.observaciones
+
+      // Precio
+      data.precio = editData.precio ? Number.parseFloat(editData.precio) : selectedPedido.precio
+
+      // Nro Guía - Incluir si se ha modificado o si ya tiene un valor
+      if (editData.nro_guia !== undefined && editData.nro_guia.trim() !== "") {
+        data.nro_guia = editData.nro_guia.trim()
+      } else if (selectedPedido.nro_guia) {
+        data.nro_guia = selectedPedido.nro_guia
+      } else {
+        // Si no hay nro_guia ni en editData ni en selectedPedido, no lo enviamos o lo enviamos como null/vacío si el backend lo requiere
+        // Por ahora, si no hay valor, no lo incluimos en el payload para evitar enviar undefined
+        // Si el backend espera un string vacío para "borrar", se puede cambiar a data.nro_guia = ""
+      }
+
+      // Fecha Entrega Estimada
+      data.fecha_entrega_estimada = editData.fecha_entrega_estimada || selectedPedido.fecha_entrega_estimada
+
+      // Fecha Entrega Real
+      if (editData.fecha_entrega_real?.trim()) {
+        data.fecha_entrega_real = editData.fecha_entrega_real.trim()
+      } else if (selectedPedido.fecha_entrega_real) {
+        data.fecha_entrega_real = selectedPedido.fecha_entrega_real
+      }
+
+      console.log("Datos FINALES a enviar a la API:", data)
+      console.log("IDs específicos en datos finales:", {
+        cliente: data.id_cliente, // Ahora se llama id_cliente
+        camion: data.id_camion,
+        conductor: data.id_conductor,
+        nro_guia: data.nro_guia,
+      })
+
+      // Llamar a la función que hace PUT
       const result = await actualizarPedido(selectedPedido.id_pedido, data)
+
+      console.log("Respuesta COMPLETA del servidor (result):", result)
+
       if (result.success) {
+        console.log("✅ Actualización exitosa (según el frontend y la respuesta del servidor)")
+
+        // Cerrar el diálogo
         setShowEditDialog(false)
         setSelectedPedido(null)
+
+        // Limpiar el formulario
         setEditData({
+          id_usuario: "",
+          id_ruta: "",
+          id_camion: "",
+          id_conductor: "",
           estado: "",
           observaciones: "",
           fecha_entrega_real: "",
+          fecha_entrega_estimada: "",
           precio: "",
           nro_guia: "",
         })
+
+        // Refrescar lista de pedidos
+        await recargarDatos()
+
+        alert("Pedido actualizado correctamente")
+      } else {
+        console.error("❌ Error en actualización (según el servidor):", result.error)
+        alert("Error al actualizar el pedido: " + (result.error || "Error desconocido"))
       }
     } catch (err) {
-      console.error("Error al editar pedido:", err)
+      console.error("❌ Error al editar pedido (catch block):", err)
+      alert("Error al editar pedido: " + (err.message || "Error desconocido"))
     }
   }
 
@@ -263,9 +398,9 @@ function PedidosAdmin() {
     if (pedido.estado !== "Pendiente") {
       return
     }
-
     if (window.confirm(`¿Está seguro de que desea eliminar el pedido #${pedido.id_pedido}?`)) {
       await eliminarPedido(pedido.id_pedido)
+      await recargarDatos()
     }
   }
 
@@ -282,16 +417,55 @@ function PedidosAdmin() {
     }
   }
 
-  // Manejador para abrir dialog de edición
+  // Manejador para abrir dialog de edición - CORREGIDO
   const handleOpenEditDialog = (pedido) => {
+    console.log("Pedido completo recibido para edición:", pedido)
+
     setSelectedPedido(pedido)
-    setEditData({
-      estado: pedido.estado,
+
+    // Formatear las fechas correctamente
+    const formatearFechaParaInput = (fecha) => {
+      if (!fecha) return ""
+      try {
+        const date = new Date(fecha)
+        // Convertir a formato datetime-local (YYYY-MM-DDTHH:mm)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, "0")
+        const day = String(date.getDate()).padStart(2, "0")
+        const hours = String(date.getHours()).padStart(2, "0")
+        const minutes = String(date.getMinutes()).padStart(2, "0")
+        return `${year}-${month}-${day}T${hours}:${minutes}`
+      } catch (error) {
+        console.error("Error al formatear fecha:", error)
+        return ""
+      }
+    }
+
+    // Asegurarse de que todos los valores se conviertan a string para los componentes Select
+    const datosFormateados = {
+      id_usuario: pedido.id_usuario?.toString() || pedido.cliente?.id_usuario?.toString() || "",
+      id_ruta: pedido.id_ruta?.toString() || pedido.ruta?.id_ruta?.toString() || "",
+      id_camion: pedido.id_camion?.toString() || pedido.camion?.id_camion?.toString() || "",
+      id_conductor: pedido.id_conductor?.toString() || pedido.conductor?.id_conductor?.toString() || "",
+      estado: pedido.estado || "",
       observaciones: pedido.observaciones || "",
-      fecha_entrega_real: pedido.fecha_entrega_real || "",
-      precio: pedido.precio || "",
+      fecha_entrega_real: pedido.fecha_entrega_real ? formatearFechaParaInput(pedido.fecha_entrega_real) : "",
+      fecha_entrega_estimada: pedido.fecha_entrega_estimada
+        ? formatearFechaParaInput(pedido.fecha_entrega_estimada)
+        : "",
+      precio: pedido.precio?.toString() || "",
       nro_guia: pedido.nro_guia || "",
+    }
+
+    console.log("Datos formateados para el formulario (editData) DESPUÉS de abrir diálogo:", datosFormateados)
+    console.log("Arrays disponibles (usuarios, rutas, camiones, conductores):", {
+      usuarios: usuarios.length,
+      rutas: rutas.length,
+      camiones: camiones.length,
+      conductores: conductores.length,
     })
+
+    setEditData(datosFormateados)
     setShowEditDialog(true)
   }
 
@@ -316,7 +490,12 @@ function PedidosAdmin() {
           <p className="text-sm text-gray-600">Administre los pedidos del sistema de transporte</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={recargarDatos} disabled={loading} className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={recargarDatos}
+            disabled={loading}
+            className="flex items-center gap-2 bg-transparent"
+          >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Recargar
           </Button>
@@ -753,9 +932,7 @@ function PedidosAdmin() {
                   </div>
                 </div>
               </div>
-
               <Separator />
-
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-gray-500" />
@@ -770,12 +947,10 @@ function PedidosAdmin() {
                     </div>
                   </div>
                 </div>
-
                 <div>
                   <p className="text-sm font-medium mb-1">Estado</p>
                   {getEstadoBadge(pedidoDetalle.estado)}
                 </div>
-
                 {pedidoDetalle.observaciones && (
                   <div>
                     <p className="text-sm font-medium mb-1">Observaciones</p>
@@ -783,7 +958,6 @@ function PedidosAdmin() {
                   </div>
                 )}
               </div>
-
               {/* Historial de seguimientos */}
               {pedidoDetalle.seguimientos && pedidoDetalle.seguimientos.length > 0 && (
                 <>
@@ -817,13 +991,92 @@ function PedidosAdmin() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de edición */}
+      {/* Dialog de edición - SIMPLIFICADO */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Editar Pedido #{selectedPedido?.id_pedido}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="id_usuario_edit">Cliente</Label>
+              <Select
+                value={editData.id_usuario}
+                onValueChange={(value) => setEditData((prev) => ({ ...prev, id_usuario: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {usuarios.map((usuario) => (
+                    <SelectItem key={usuario.id_usuario} value={usuario.id_usuario.toString()}>
+                      {usuario.nombre_completo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id_ruta_edit">Ruta</Label>
+              <Select
+                value={editData.id_ruta}
+                onValueChange={(value) => {
+                  const rutaSeleccionada = rutas.find((r) => r.id_ruta.toString() === value)
+                  setEditData((prev) => ({
+                    ...prev,
+                    id_ruta: value,
+                    precio: rutaSeleccionada ? rutaSeleccionada.precio.toString() : prev.precio,
+                  }))
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione una ruta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rutas.map((ruta) => (
+                    <SelectItem key={ruta.id_ruta} value={ruta.id_ruta.toString()}>
+                      {ruta.origen} → {ruta.destino} ({ruta.distancia_km} km)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id_camion_edit">Camión</Label>
+              <Select
+                value={editData.id_camion}
+                onValueChange={(value) => setEditData((prev) => ({ ...prev, id_camion: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un camión" />
+                </SelectTrigger>
+                <SelectContent>
+                  {camiones.map((camion) => (
+                    <SelectItem key={camion.id_camion} value={camion.id_camion.toString()}>
+                      {camion.placa} - {camion.capacidad_kg} kg
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="id_conductor_edit">Conductor</Label>
+              <Select
+                value={editData.id_conductor}
+                onValueChange={(value) => setEditData((prev) => ({ ...prev, id_conductor: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un conductor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {conductores.map((conductor) => (
+                    <SelectItem key={conductor.id_conductor} value={conductor.id_conductor.toString()}>
+                      {conductor.nombre_completo} - {conductor.numero_licencia}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="estado_edit">Estado</Label>
               <Select
@@ -831,7 +1084,7 @@ function PedidosAdmin() {
                 onValueChange={(value) => setEditData((prev) => ({ ...prev, estado: value }))}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Seleccione un estado" />
                 </SelectTrigger>
                 <SelectContent>
                   {estadoOptions.map((option) => (
@@ -841,6 +1094,16 @@ function PedidosAdmin() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fecha_entrega_estimada_edit">Fecha Entrega Estimada</Label>
+              <Input
+                id="fecha_entrega_estimada_edit"
+                type="datetime-local"
+                value={editData.fecha_entrega_estimada}
+                onChange={(e) => setEditData((prev) => ({ ...prev, fecha_entrega_estimada: e.target.value }))}
+                min={getMinDateTime()}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="nro_guia_edit">N° Guía</Label>
@@ -864,21 +1127,21 @@ function PedidosAdmin() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="observaciones_edit">Observaciones</Label>
-              <Textarea
-                id="observaciones_edit"
-                placeholder="Ingrese observaciones..."
-                value={editData.observaciones}
-                onChange={(e) => setEditData((prev) => ({ ...prev, observaciones: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="fecha_entrega_real">Fecha Entrega Real</Label>
               <Input
                 id="fecha_entrega_real"
                 type="datetime-local"
                 value={editData.fecha_entrega_real}
                 onChange={(e) => setEditData((prev) => ({ ...prev, fecha_entrega_real: e.target.value }))}
+              />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label htmlFor="observaciones_edit">Observaciones</Label>
+              <Textarea
+                id="observaciones_edit"
+                placeholder="Ingrese observaciones..."
+                value={editData.observaciones}
+                onChange={(e) => setEditData((prev) => ({ ...prev, observaciones: e.target.value }))}
               />
             </div>
           </div>

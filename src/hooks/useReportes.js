@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { toast } from "@/hooks/use-toast"
+import * as XLSX from "xlsx"
 
 // URLs base de las APIs existentes
 const API_BASE_URL = "https://translogitrack-server-production.up.railway.app/api"
@@ -15,11 +16,6 @@ export function useReportes() {
   // Estados del hook
   const [reporteData, setReporteData] = useState({
     general: null,
-    pedidos: null,
-    conductores: null,
-    camiones: null,
-    rutas: null,
-    usuarios: null,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -258,7 +254,7 @@ export function useReportes() {
           rangoFechas: { inicio: fechaInicio, fin: fechaFin },
         }
 
-        setReporteData((prev) => ({ ...prev, general: reporteGeneral }))
+        setReporteData({ general: reporteGeneral })
         console.log("✅ Reporte general generado")
       } catch (err) {
         console.error("❌ Error al generar reporte general:", err)
@@ -276,71 +272,87 @@ export function useReportes() {
   )
 
   /**
-   * Función para generar reporte específico de pedidos
-   * @param {string} fechaInicio - Fecha de inicio
-   * @param {string} fechaFin - Fecha de fin
+   * Función para exportar reporte a Excel
+   * @param {Object} data - Datos del reporte
+   */
+  const exportarExcel = useCallback((data) => {
+    const workbook = XLSX.utils.book_new()
+    const fechaActual = new Date().toLocaleDateString("es-ES")
+
+    // Hoja de estadísticas generales
+    const estadisticas = [
+      ["Métrica", "Valor"],
+      ["Total Pedidos", data.pedidos.total],
+      ["Pedidos Entregados", data.pedidos.entregados],
+      ["Pedidos Pendientes", data.pedidos.pendientes],
+      ["Pedidos En Tránsito", data.pedidos.enTransito],
+      ["Pedidos Cancelados", data.pedidos.cancelados],
+      ["Ingresos Totales", data.pedidos.ingresosTotales],
+      [""],
+      ["Conductores Totales", data.conductores.total],
+      ["Conductores Activos", data.conductores.activos],
+      ["Conductores Inactivos", data.conductores.inactivos],
+      [""],
+      ["Camiones Totales", data.camiones.total],
+      ["Camiones Disponibles", data.camiones.disponibles],
+      ["Camiones Asignados", data.camiones.asignados],
+      ["Camiones En Mantenimiento", data.camiones.enMantenimiento],
+      ["Camiones Inactivos", data.camiones.inactivos],
+      [""],
+      ["Rutas Totales", data.rutas.total],
+      ["Distancia Promedio (km)", Math.round(data.rutas.distanciaPromedio)],
+      ["Ruta Más Larga (km)", data.rutas.rutaMasLarga],
+      ["Ruta Más Corta (km)", data.rutas.rutaMasCorta],
+      [""],
+      ["Usuarios Totales", data.usuarios.total],
+      ["Administradores", data.usuarios.administradores],
+      ["Operadores", data.usuarios.operadores],
+      ["Clientes", data.usuarios.clientes],
+    ]
+
+    const worksheet = XLSX.utils.aoa_to_sheet(estadisticas)
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Estadísticas Generales")
+
+    // Hoja de tendencias
+    const tendencias = [["Día", "Fecha", "Pedidos"], ...data.tendenciaPedidos.map((t) => [t.dia, t.fecha, t.pedidos])]
+    const worksheetTendencias = XLSX.utils.aoa_to_sheet(tendencias)
+    XLSX.utils.book_append_sheet(workbook, worksheetTendencias, "Tendencias")
+
+    // Guardar Excel
+    XLSX.writeFile(workbook, `reporte-general-${fechaActual}.xlsx`)
+  }, [])
+
+  /**
+   * Función para exportar datos
+   * @param {string} formato - Formato de exportación (excel)
+   * @param {string} tipoReporte - Tipo de reporte
+   * @param {Object} data - Datos del reporte
    * @returns {Promise<void>}
    */
-  const generarReportePedidos = useCallback(
-    async (fechaInicio = null, fechaFin = null) => {
-      setLoading(true)
-      setError(null)
-
+  const exportarReporte = useCallback(
+    async (formato, tipoReporte, data) => {
       try {
-        const pedidos = await obtenerDatosPedidos(fechaInicio, fechaFin)
-
-        // Análisis por estado
-        const porEstado = {
-          Pendiente: pedidos.filter((p) => p.estado === "Pendiente"),
-          "En tránsito": pedidos.filter((p) => p.estado === "En tránsito"),
-          Entregado: pedidos.filter((p) => p.estado === "Entregado"),
-          Cancelado: pedidos.filter((p) => p.estado === "Cancelado"),
-        }
-
-        // Análisis por ruta más utilizada
-        const rutasUtilizadas = {}
-        pedidos.forEach((pedido) => {
-          if (pedido.ruta) {
-            const rutaKey = `${pedido.ruta.origen} → ${pedido.ruta.destino}`
-            rutasUtilizadas[rutaKey] = (rutasUtilizadas[rutaKey] || 0) + 1
-          }
-        })
-
-        // Análisis de ingresos
-        const ingresosPorMes = {}
-        pedidos.forEach((pedido) => {
-          if (pedido.precio && pedido.fecha_creacion) {
-            const mes = new Date(pedido.fecha_creacion).toISOString().slice(0, 7) // YYYY-MM
-            ingresosPorMes[mes] = (ingresosPorMes[mes] || 0) + Number(pedido.precio)
-          }
-        })
-
-        const reportePedidos = {
-          total: pedidos.length,
-          porEstado,
-          rutasUtilizadas,
-          ingresosPorMes,
-          ingresoTotal: pedidos.reduce((sum, p) => sum + (Number(p.precio) || 0), 0),
-          tiempoPromedioEntrega: 0, // Calcular si hay fechas de entrega
-          fechaGeneracion: new Date().toISOString(),
-          rangoFechas: { inicio: fechaInicio, fin: fechaFin },
-        }
-
-        setReporteData((prev) => ({ ...prev, pedidos: reportePedidos }))
-        console.log("✅ Reporte de pedidos generado")
-      } catch (err) {
-        console.error("❌ Error al generar reporte de pedidos:", err)
-        setError("Error al generar reporte de pedidos")
         toast({
-          title: "Error",
-          description: "No se pudo generar el reporte de pedidos",
+          title: "Exportación iniciada",
+          description: `Generando archivo Excel del reporte...`,
+        })
+
+        exportarExcel(data)
+
+        toast({
+          title: "Exportación completada",
+          description: `El reporte ha sido exportado exitosamente como Excel`,
+        })
+      } catch (error) {
+        console.error("Error al exportar:", error)
+        toast({
+          title: "Error en exportación",
+          description: "No se pudo exportar el reporte. Intente nuevamente.",
           variant: "destructive",
         })
-      } finally {
-        setLoading(false)
       }
     },
-    [obtenerDatosPedidos],
+    [exportarExcel],
   )
 
   /**
@@ -348,28 +360,6 @@ export function useReportes() {
    */
   const limpiarError = useCallback(() => {
     setError(null)
-  }, [])
-
-  /**
-   * Función para exportar datos (simulado)
-   * @param {string} formato - Formato de exportación (pdf, excel)
-   * @param {string} tipoReporte - Tipo de reporte
-   * @returns {Promise<void>}
-   */
-  const exportarReporte = useCallback(async (formato, tipoReporte) => {
-    // Simulación de exportación
-    toast({
-      title: "Exportación iniciada",
-      description: `Generando archivo ${formato.toUpperCase()} del reporte de ${tipoReporte}...`,
-    })
-
-    // Aquí se implementaría la lógica real de exportación
-    setTimeout(() => {
-      toast({
-        title: "Exportación completada",
-        description: `El reporte ha sido exportado exitosamente`,
-      })
-    }, 2000)
   }, [])
 
   return {
@@ -380,7 +370,6 @@ export function useReportes() {
 
     // Funciones
     generarReporteGeneral,
-    generarReportePedidos,
     exportarReporte,
     limpiarError,
   }

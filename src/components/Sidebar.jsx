@@ -61,12 +61,12 @@ function Sidebar({ activeItem, onItemClick, className = "" }) {
         icon: BarChart3,
         roles: ["Administrador"],
       },
-      {
+      /**{
         name: "Configuración",
         href: "/dashboard/configuracion",
         icon: Settings,
         roles: ["Administrador"],
-      },
+      },**/
     ]
 
     // Items para Administradores y Operadores
@@ -121,12 +121,12 @@ function Sidebar({ activeItem, onItemClick, className = "" }) {
         icon: MapPin,
         roles: ["Administrador", "Operador", "Cliente"],
       },
-      {
+      /**{
         name: "Mi Perfil",
         href: "/dashboard/mi-perfil",
         icon: User,
         roles: ["Administrador", "Operador", "Cliente"],
-      },
+      },**/
     ]
 
     // Combinar items según el rol

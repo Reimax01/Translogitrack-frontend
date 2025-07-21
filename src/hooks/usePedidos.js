@@ -375,6 +375,117 @@ const usePedidos = () => {
     console.log("🚀 usePedidos: Cargando pedidos automáticamente...")
     listarPedidos()
   }, [listarPedidos])
+  
+
+  //**Actualizar el pedido con los nuevos datos */
+  const actualizarPedido = useCallback(
+  async (id_pedido, datosActualizados) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log(`🔄 Actualizando pedido ID: ${id_pedido}`, datosActualizados)
+
+      const response = await fetch(`${API_BASE_URL}/${id_pedido}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          id_cliente: datosActualizados.id_cliente,
+          id_ruta: datosActualizados.id_ruta,
+          id_camion: datosActualizados.id_camion,
+          id_conductor: datosActualizados.id_conductor,
+          fecha_entrega_estimada: datosActualizados.fecha_entrega_estimada,
+          observaciones: datosActualizados.observaciones,
+          precio: datosActualizados.precio,
+          nro_guia: datosActualizados.nro_guia,
+          estado: datosActualizados.estado,
+        }),
+      })
+
+      if (handleAuthError(response)) {
+        return { success: false, error: "Error de autenticación" }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Error HTTP: ${response.status}`)
+      }
+
+      const pedidoActualizado = await response.json()
+      console.log("✅ Pedido actualizado:", pedidoActualizado)
+
+      setPedidos((prevPedidos) =>
+        prevPedidos.map((pedido) =>
+          pedido.id_pedido === id_pedido ? pedidoActualizado : pedido
+        )
+      )
+
+      toast({
+        title: "¡Éxito!",
+        description: `Pedido #${id_pedido} actualizado correctamente`,
+      })
+
+      return { success: true, data: pedidoActualizado }
+    } catch (err) {
+      console.error("❌ Error al actualizar pedido:", err.message)
+      const errorMessage = err.message || "Error al actualizar pedido"
+      setError(errorMessage)
+
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
+
+      return { success: false, error: errorMessage }
+    } finally {
+      setLoading(false)
+    }
+  },
+  [getHeaders, toast]
+)
+
+
+  //**Eliminar pedido */
+  const eliminarPedido = useCallback(
+  async (id) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/${id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      })
+
+      if (handleAuthError(response)) {
+        return { success: false, error: "Error de autenticación" }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Error HTTP: ${response.status}`)
+      }
+
+      toast({
+        title: "Pedido eliminado",
+        description: `El pedido con ID ${id} fue eliminado correctamente.`,
+      })
+
+      // Actualizar estado local quitando el pedido eliminado
+      setPedidos((prev) => prev.filter((p) => p.id_pedido !== id))
+
+      return { success: true }
+    } catch (err) {
+      console.error("❌ Error al eliminar pedido:", err.message)
+      toast({
+        title: "Error al eliminar",
+        description: err.message || "No se pudo eliminar el pedido",
+        variant: "destructive",
+      })
+
+      return { success: false, error: err.message }
+    }
+  },
+  [getHeaders, toast],
+)
 
   return {
     pedidos,
@@ -392,6 +503,8 @@ const usePedidos = () => {
     recargarDatos,
     useMockData,
     refetch, // Añadir refetch al return
+    eliminarPedido,
+    actualizarPedido,
   }
 }
 
